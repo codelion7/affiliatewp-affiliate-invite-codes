@@ -1,0 +1,109 @@
+<?php
+/**
+ * Plugin Name: AffiliateWP - Affiliate Invite Codes
+ * Plugin URI: http://affiliatewp.com
+ * Description: Connects affiliate referral keys to invite codes. If one is set, the other will be set.
+ * Author: Christian Freeman
+ * Author URI: http://affiliatewp.com
+ * Version: 1.0
+ */
+
+// Make sure that AffiliateWP is active
+if ( ! function_exists( 'affiliate_wp' ) )
+	return;
+
+/**
+* Automatically enters the referring affiliate's Paid Membership Pro Invite Code in the Member Checkout Form when the affiliateWP referral cookie is detected.
+*
+* @since  1.0
+*/
+add_action("init", "affwp_pmpro_aic_get_code_from_ref", 30);
+function affwp_pmpro_aic_get_code_from_ref(){
+
+	// Get a valid affiliate_id from cookie 
+	$affiliate_id = affiliate_wp()->tracking->get_affiliate_id();
+	
+	// Checkout page - If no invite code is found check for affiliate_id
+	if( !isset( $_REQUEST['invite_code'] ) && ( !empty( $affiliate_id ) ) ) {
+	
+		$aff_user_id = affiliate_wp()->affiliates->get_column( 'user_id', $affiliate_id );
+		
+		// set the invite code if there is an affiliate user id	
+		$aff_invite_code = get_user_meta( $aff_user_id, 'pmpro_invite_code', true );
+
+		// auto-populate the invite code field if there is an affiliate invite code	
+		$_REQUEST['invite_code'] = reset( $aff_invite_code );
+		
+	}
+}
+
+//show affiliate id on orders dashboard page
+add_action("pmpro_orders_show_affiliate_ids", "__return_true");
+
+/**  COMING SOON
+* Gives the referral to the affiliate when a visitor manually inserts the affiliate's Paid Membership Pro Invite Code.
+*
+* @since  1.0
+
+add_action("pmpro_add_order", "affwp_pmpro_aic_get_ref_from_code", 10, 1);
+function affwp_pmpro_aic_get_ref_from_code( $order ){
+
+	// Make sure AffiliateWP PM Pro Invite Only are active
+	if ( ! ( function_exists( 'affiliate_wp' ) || function_exists( 'pmproio_getUserFromInviteCode' ) ) )
+	return;
+
+	// if no affiliate found check for invite code
+	if( !empty( $_REQUEST['invite_code'] ) && empty( $affiliate_id ) ) {
+	
+		$inv_code = $_REQUEST['invite_code'];	
+		
+		// Get affiliate's user id by the invite code entered
+		$aff_userId = pmproio_getUserFromInviteCode( $inv_code );
+		$user = get_user_by( 'id', $aff_userId );
+		
+		// Get a valid affiliate_id using the affiliate's user_id 
+		$affiliate_id = affiliate_wp()->tracking->get_affiliate_id_from_login( $user->user_login ); 		
+
+		// Set the Set the referring affiliate_id via cookie
+		if ( affiliate_wp()->tracking->is_valid_affiliate( $affiliate_id ) ) {
+			affiliate_wp()->tracking->set_affiliate_id( $affiliate_id );
+		}
+	}			
+|
+*/
+
+
+/**	
+* Swaps BuddyPress based invite anyone accept invite link w/ affiliate's referral link
+*
+* @since  1.0
+*/
+function affwp_ia_aic_add_aff_ref( $email ) {
+	global $bp;
+	
+	$ia_url = bp_get_root_domain() . '/' . bp_get_signup_slug() . '/accept-invitation/' . urlencode( $email );
+	$pmpro_url = pmpro_url("levels");
+	
+	// Get inviter's user info
+	$inviter_id = bp_loggedin_user_id();
+	$user = get_user_by( 'id', $inviter_id );
+	
+	// Get a valid affiliate_id using the affiliate's user_id 
+	$affiliate_id = affiliate_wp()->tracking->get_affiliate_id_from_login( $user->user_login ); 		
+	
+	// Check for an affiliate
+	if( $affiliate_id ) {
+
+		$inviter_aff_ref = $affiliate_id; // TrackingKey
+		
+	} else {
+			$inviter_aff_ref = '';
+	}			
+	
+	str_replace($ia_url, $pmpro_url, invite_anyone_accept_url);
+	
+	
+	return add_query_arg( 'ref', $inviter_aff_ref, $pmpro_url );
+}
+add_filter( 'invite_anyone_accept_url', 'affwp_ia_aic_add_aff_ref' );
+
